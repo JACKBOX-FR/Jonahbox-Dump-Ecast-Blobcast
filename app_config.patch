@@ -1,0 +1,34 @@
+diff --git a/src/ecast/mod.rs b/src/ecast/mod.rs
+index 24d1c79..2c3f61e 100644
+--- a/src/ecast/mod.rs
++++ b/src/ecast/mod.rs
+@@ -310,13 +310,24 @@ pub async fn app_config_handler(
+ ) -> crate::error::Result<Json<JBResponse<serde_json::Value>>> {
+     match state.config.ecast.op_mode {
+         OpMode::Native => {
++            // Si un fichier app_configs/<tag>.json existe (copie de la vraie réponse
++            // d'ecast), on le renvoie en y ajoutant serverUrl. Sinon config minimale.
++            let mut body = json!({ "settings": {} });
++            let safe = code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
++            if safe {
++                if let Ok(txt) = tokio::fs::read_to_string(format!("app_configs/{}.json", code)).await {
++                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&txt) {
++                        body = v.get("body").cloned().unwrap_or(v);
++                    }
++                }
++            }
++            if !body.get("settings").map(|s| s.is_object()).unwrap_or(false) {
++                body["settings"] = json!({});
++            }
++            body["settings"]["serverUrl"] = json!(state.config.accessible_host.clone());
+             return Ok(Json(JBResponse {
+                 ok: true,
+-                body: JBResponseBody::Body(json!({
+-                    "settings": {
+-                        "serverUrl": state.config.accessible_host.clone()
+-                    }
+-                })),
++                body: JBResponseBody::Body(body),
+             }));
+         }
+         OpMode::Proxy => {

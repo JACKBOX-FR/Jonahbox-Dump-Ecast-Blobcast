@@ -1,0 +1,106 @@
+diff --git a/src/acl.rs b/src/acl.rs
+index 1fa3f19..92f6c84 100644
+--- a/src/acl.rs
++++ b/src/acl.rs
+@@ -1,7 +1,41 @@
+ use std::{borrow::Cow, fmt::Display, str::FromStr};
+ 
+ use serde::{de::Error, Deserialize, Serialize};
+-use tokio::io::Interest;
++use std::ops::{BitOr, BitOrAssign};
++
++/// Remplace `tokio::io::Interest`, dont `PRIORITY` n'existe que sous Linux/Android.
++/// Ici ce n'est qu'un jeu de drapeaux pour les permissions ACL (s/r/w).
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub struct Interest(u8);
++
++impl Interest {
++    pub const READABLE: Interest = Interest(1);
++    pub const WRITABLE: Interest = Interest(2);
++    pub const PRIORITY: Interest = Interest(4);
++
++    pub fn is_readable(self) -> bool {
++        self.0 & 1 != 0
++    }
++    pub fn is_writable(self) -> bool {
++        self.0 & 2 != 0
++    }
++    pub fn is_priority(self) -> bool {
++        self.0 & 4 != 0
++    }
++}
++
++impl BitOr for Interest {
++    type Output = Interest;
++    fn bitor(self, rhs: Interest) -> Interest {
++        Interest(self.0 | rhs.0)
++    }
++}
++
++impl BitOrAssign for Interest {
++    fn bitor_assign(&mut self, rhs: Interest) {
++        self.0 |= rhs.0;
++    }
++}
+ 
+ #[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+ #[serde(rename_all = "lowercase")]
+diff --git a/src/blobcast/ws.rs b/src/blobcast/ws.rs
+index 51a58cc..ba847fd 100644
+--- a/src/blobcast/ws.rs
++++ b/src/blobcast/ws.rs
+@@ -8,7 +8,7 @@ use std::{
+ };
+ 
+ use crate::{
+-    acl::{Acl, Role},
++    acl::{Acl, Interest, Role},
+     entity::{
+         AudienceTextRing, JBAttributes, JBAudienceValue, JBCountGroup, JBEntity, JBObject,
+         JBPlayerValue, JBRestrictions, JBType, JBValue,
+@@ -23,10 +23,7 @@ use futures_util::{stream::SplitStream, SinkExt, StreamExt, TryStreamExt};
+ use indexmap::IndexMap;
+ use ringbuf::HeapRb;
+ use serde::{de::IgnoredAny, Deserialize, Serialize};
+-use tokio::{
+-    io::Interest,
+-    sync::{Mutex, Notify},
+-};
++use tokio::sync::{Mutex, Notify};
+ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+ use tracing::instrument;
+ 
+diff --git a/src/entity.rs b/src/entity.rs
+index 70f5aa8..4031f38 100644
+--- a/src/entity.rs
++++ b/src/entity.rs
+@@ -13,7 +13,7 @@ use indexmap::IndexMap;
+ use ringbuf::{traits::Consumer, Cons};
+ use serde::{de::Error, ser::SerializeSeq, Deserialize, Serialize, Serializer};
+ use tiny_skia::{Color, Paint, PathBuilder, Pixmap, Stroke, Transform};
+-use tokio::io::Interest;
++use crate::acl::Interest;
+ use yrs::{sync::Awareness, ReadTxn, Snapshot, StateVector, Transact};
+ 
+ use crate::{acl::Role, ecast::ws::JBResult};
+diff --git a/src/http_cache.rs b/src/http_cache.rs
+index 7b9198e..cefadf5 100644
+--- a/src/http_cache.rs
++++ b/src/http_cache.rs
+@@ -1,7 +1,6 @@
+ use std::borrow::Cow;
+ use std::io::{BufReader, BufWriter, Cursor};
+ use std::ops::DerefMut;
+-use std::os::unix::fs::MetadataExt;
+ use std::path::Path;
+ use std::sync::Arc;
+ 
+@@ -501,7 +500,7 @@ impl HttpCache {
+                         )
+                     })
+                     .with_status_code(StatusCode::INTERNAL_SERVER_ERROR)?
+-                    .size() as usize,
++                    .len() as usize,
+             );
+             let mut resp = if resp.compressed {
+                 (status_code, resp_headers, {
