@@ -273,11 +273,17 @@ dans `voices_path` (config nommée `{voix}.onnx.json`), et installe [ffmpeg](htt
 ## 8. Pour les curieux : capturer le trafic officiel
 
 Pour étudier le fonctionnement des jeux (ou ajouter la prise en charge d'un nouveau pack), on peut
-enregistrer le trafic avec [mitmproxy](https://mitmproxy.org/) et `capture2.py` :
+enregistrer le trafic avec [mitmproxy](https://mitmproxy.org/). Les outils sont dans le dossier
+**`jackbox-capture`** :
+
+- `capture2.py` : enregistre le trafic Jackbox (HTTP et WebSocket) dans `captures\session-….jsonl`.
+- `viewer.py` : permet de visualiser plus facilement les étapes d'une capture.
 
 ```powershell
-mitmdump -s capture2.py                      # trafic des manettes (navigateur)
-python capture2.py captures\session-XXXX.jsonl   # résumé lisible
+cd jackbox-capture
+mitmdump -s capture2.py                              # trafic des manettes (navigateur)
+python viewer.py captures\session-XXXX.jsonl         # visualiser les étapes
+python capture2.py captures\session-XXXX.jsonl       # résumé texte compact
 ```
 
 Pour capturer le **jeu** lui-même, voir l'en-tête de `capture2.py` (mode reverse avec `JB_PROXY_HOST`).
